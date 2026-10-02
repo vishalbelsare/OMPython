@@ -32,17 +32,10 @@
  Version: 1.0
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from builtins import int, range
+from typing import Any
 
-import sys
+result: dict[str, Any] = {}
 
-result = dict()
-
-inner_sets = []
-next_set_list = []
 next_set = []
 next_set.append('')
 
@@ -51,10 +44,9 @@ def bool_from_string(string):
     """Attempt conversion of string to a boolean """
     if string in {'true', 'True', 'TRUE'}:
         return True
-    elif string in {'false', 'False', 'FALSE'}:
+    if string in {'false', 'False', 'FALSE'}:
         return False
-    else:
-        raise ValueError
+    raise ValueError
 
 
 def typeCheck(string):
@@ -71,12 +63,11 @@ def typeCheck(string):
             return t(string)
         except ValueError:
             continue
-    else:
-        print("String contains un-handled datatype")
-        return string
+    raise ValueError(f"String contains un-handled datatype: {repr(string)}!")
 
 
 def make_values(strings, name):
+    """Parse a value string and store its values into the result structure."""
     if strings[0] == "(" and strings[-1] == ")":
         strings = strings[1:-1]
     if strings[0] == "{" and strings[-1] == "}":
@@ -165,14 +156,9 @@ def make_values(strings, name):
                 varValue = (varValue.replace('{', '').strip()).replace('}', '').strip()
                 multiple_values = varValue.split(",")
 
-            for n in range(len(multiple_values)):
-                each_v = multiple_values[n]
-                multiple_values.pop(n)
-                each_v = typeCheck(each_v)
-                multiple_values.append(each_v)
-
             if len(multiple_values) != 0:
-                result[main_set_name]['Elements'][name]['Properties']['Results'][varName] = multiple_values
+                multiple_values_type_checked = [typeCheck(val) for val in multiple_values]
+                result[main_set_name]['Elements'][name]['Properties']['Results'][varName] = multiple_values_type_checked
             elif varName != "" and varValue != "":
                 result[main_set_name]['Elements'][name]['Properties']['Results'][varName] = varValue
             else:
@@ -181,6 +167,7 @@ def make_values(strings, name):
 
 
 def delete_elements(strings):
+    """Remove parenthesized elements (and braces) from the given string."""
     index = 0
     while index < len(strings):
         character = strings[index]
@@ -191,12 +178,12 @@ def delete_elements(strings):
                 char = strings[pos]
                 if char == "":
                     break
-                elif char == ",":
+                if char == ",":
                     break
-                elif char == " ":
+                if char == " ":
                     pos = pos + 1
                     break
-                elif char == "{":
+                if char == "{":
                     break
                 pos = pos - 1
             delStr = strings[pos: strings.rfind(")")]
@@ -207,8 +194,7 @@ def delete_elements(strings):
 
 
 def make_subset_sets(strings, name):
-    index = 0
-    anchor = 0
+    """Parse a subset definition and store it into the result structure."""
     main_set_name = "SET1"
     subset_name = "Subset1"
     set_name = "Set1"
@@ -283,10 +269,9 @@ def make_subset_sets(strings, name):
 
 
 def make_sets(strings, name):
+    """Parse a set definition and store it into the result structure."""
     if strings == "{}":
         return
-    index = 0
-    anchor = 0
     main_set_name = "SET1"
     set_name = "Set1"
 
@@ -343,6 +328,7 @@ def make_sets(strings, name):
 
 
 def get_inner_sets(strings, for_this, name):
+    """Extract inner (nested) sets from the given string."""
     start = 0
     end = 0
     main_set_name = "SET1"
@@ -415,7 +401,7 @@ def get_inner_sets(strings, for_this, name):
 
 
 def make_elements(strings):
-    original_string = strings
+    """Parse the element definitions and store them into the result structure."""
     index = 0
     main_set_name = "SET1"
 
@@ -477,15 +463,13 @@ def make_elements(strings):
                     skip_start = index + 1
                     if strings[skip_start] == "{":
                         skip_brace += 1
-                        indx = skip_start
-                        while indx < len(strings):
-                            char = strings[indx]
+                        for i in range(skip_start, len(strings)):
+                            char = strings[i]
                             if char == "}":
                                 skip_brace -= 1
                                 if skip_brace == 0:
-                                    index = indx + 1
+                                    index = i + 1
                                     break
-                            indx += 1
 
                 index += 1
 
@@ -532,21 +516,22 @@ def make_elements(strings):
 
 
 def check_for_next_string(next_string):
-    anchorr = 0
-    positionn = 0
-    stopp = 0
+    """Remove brace-wrapped blocks from the string, returning an empty string if none remain."""
+    anchor = 0
+    position = 0
+    stop = 0
 
     # remove braces & keep only the SET's values
-    while positionn < len(next_string):
-        check_str = next_string[positionn]
+    while position < len(next_string):
+        check_str = next_string[position]
         if check_str == "{":
-            anchorr = positionn
+            anchor = position
         elif check_str == "}":
-            stopp = positionn
-            delStr = next_string[anchorr:stopp + 1]
+            stop = position
+            delStr = next_string[anchor:stop + 1]
             next_string = next_string.replace(delStr, '')
-            positionn = -1
-        positionn += 1
+            position = -1
+        position += 1
 
         if isinstance(next_string, str):
             if len(next_string) == 0:
@@ -555,15 +540,20 @@ def check_for_next_string(next_string):
 
 
 def get_the_set(string):
+    """Split the given string into the current set and the next set.
+
+    Returns:
+        A ``(current_set, next_set)`` tuple of the parsed set strings.
+    """
 
     def skip_all_inner_sets(position):
+        """Skip nested sets and return the end position of the main set."""
         position += 1
         count = 1
         main_count = 1
         max_count = main_count
         last_set = 0
         last_subset = 0
-        last_brace = 0
         pos = position
 
         while pos < len(string):
@@ -578,8 +568,8 @@ def get_the_set(string):
                     break
             pos += 1
         if count != 0:
-            print("\nParser Error: Are you missing one or more '}'s? \n")
-            sys.exit(1)
+            raise ValueError("Parser Error: Are you missing one or more '}}'s in string? "
+                             f"(string value: {repr(string)}")
 
         if max_count >= 2:
             while position < end_of_main_set:
@@ -616,7 +606,6 @@ def get_the_set(string):
                                 break
                         elif ch == "(":
                             brace_count += 1
-                            brace_start = position
                             position += 1
                             while position < end_of_main_set:
                                 s = string[position]
@@ -625,19 +614,16 @@ def get_the_set(string):
                                 elif s == ")":
                                     brace_count -= 1
                                     if brace_count == 0:
-                                        last_brace = position
                                         break
                                 elif s == "=" and string[position + 1] == "{":
-                                    indx = position + 2
                                     skip_brace = 1
-                                    while indx < end_of_main_set:
-                                        char = string[indx]
+                                    for i in range(position + 2, end_of_main_set):
+                                        char = string[i]
                                         if char == "}":
                                             skip_brace -= 1
                                             if skip_brace == 0:
-                                                position = indx + 1
+                                                position = i + 1
                                                 break
-                                        indx += 1
                                 position += 1
                         position += 1
                 elif char == "{" and string[position + 1] == "{":
@@ -672,7 +658,6 @@ def get_the_set(string):
                                 break
                         elif ch == "(":
                             brace_count += 1
-                            brace_start = position
                             position += 1
                             while position < end_of_main_set:
                                 s = string[position]
@@ -681,13 +666,11 @@ def get_the_set(string):
                                 elif s == ")":
                                     brace_count -= 1
                                     if brace_count == 0:
-                                        last_brace = position
                                         break
                                 position += 1
                         position += 1
                 elif char == "(":
                     brace_count += 1
-                    brace_start = position
                     position += 1
                     while position < end_of_main_set:
                         s = string[position]
@@ -696,22 +679,20 @@ def get_the_set(string):
                         elif s == ")":
                             brace_count -= 1
                             if brace_count == 0:
-                                last_brace = position
                                 break
                         position += 1
 
                 position += 1
         else:
             next_set[0] = ""
-            return (len(string) - 1)
+            return len(string) - 1
 
         max_of_sets = max(last_set, last_subset)
         max_of_main_set = max(max_of_sets, last_subset)
 
         if max_of_main_set != 0:
             return max_of_main_set
-        else:
-            return (len(string) - 1)
+        return len(string) - 1
 
     # Main entry of get_the_string()
     index = 0
@@ -765,8 +746,7 @@ def get_the_set(string):
         else:
             return current_set, next_set[0]
     else:
-        print("\nThe following String has no {}s to proceed\n")
-        print(string)
+        raise ValueError(f"The following String has no {{}}s to proceed: {repr(string)}!")
 
     # End of get_the_string()
 
@@ -774,6 +754,7 @@ def get_the_set(string):
 
 
 def formatSimRes(strings):
+    """Parse a ``SimulationResult`` record and store it into the result structure."""
     result['SimulationResults'] = {}
     simRes = strings[strings.find('  resultFile') + 1:strings.find('\nend SimulationResult')]
     simRes = simRes.translate(None, "\\")
@@ -816,6 +797,7 @@ def formatSimRes(strings):
 
 
 def formatRecords(strings):
+    """Parse a ``record`` definition and store it into the result structure."""
     result['RecordResults'] = {}
     recordName = strings[strings.find("record ") + 1:strings.find("\n")]
     recordName = recordName.replace("ecord ", '').strip()
@@ -838,6 +820,10 @@ def formatRecords(strings):
 
 
 def check_for_values(string):
+    """Parse an OMC response string into the result structure.
+
+    Handles typed values, records (SimulationResult), and nested sets.
+    """
     main_set_name = "SET1"
     if len(string) == 0:
         return result
@@ -855,7 +841,7 @@ def check_for_values(string):
     if "record SimulationResult" in string:
         formatSimRes(string)
         return result
-    elif "record " in string:
+    if "record " in string:
         formatRecords(string)
         return result
 
@@ -863,7 +849,7 @@ def check_for_values(string):
 
     if not isinstance(string, str):
         return string
-    elif string.find("{") == -1:
+    if string.find("{") == -1:
         return string
 
     current_set, next_set = get_the_set(string)
@@ -909,3 +895,23 @@ def check_for_values(string):
             check_for_values(next_set)
 
     return result
+
+
+# TODO: hack to be able to use one entry point which also resets the (global) variable results
+#       this should be checked such that the content of this file can be used as class with correct handling of
+#       variable usage
+def om_parser_basic(string: str):
+    """Parse an OMC response string and return the parsed result structure.
+
+    Args:
+        string: The (untyped) OMC response to parse.
+
+    Returns:
+        A dictionary with the parsed sets/elements/values.
+    """
+    result_return = check_for_values(string=string)
+
+    global result
+    result = {}
+
+    return result_return

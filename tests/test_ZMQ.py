@@ -1,59 +1,67 @@
+import pathlib
+import os
+
+import pytest
+
 import OMPython
-import unittest
-import tempfile, shutil, os
 
-class ZMQTester(unittest.TestCase):
-  def __init__(self, *args, **kwargs):
-    super(ZMQTester, self).__init__(*args, **kwargs)
-    self.simpleModel = """model M
+
+@pytest.fixture
+def model_time_str():
+    return """model M
   Real r = time;
-end M;"""
-    self.tmp = tempfile.mkdtemp(prefix='tmpOMPython.tests')
-    self.origDir = os.getcwd()
-    os.chdir(self.tmp)
-    self.om = OMPython.OMCSessionZMQ()
-    os.chdir(self.origDir)
-  def __del__(self):
-    shutil.rmtree(self.tmp, ignore_errors=True)
-    del(self.om)
-  def clean(self):
-    del(self.om)
-    self.om = None
+end M;
+"""
 
-  def testHelloWorld(self):
-    self.assertEqual("HelloWorld!", self.om.sendExpression('"HelloWorld!"'))
-    self.clean()
-  def testTranslate(self):
-    self.assertEqual(("M",), self.om.sendExpression(self.simpleModel))
-    self.assertEqual(True, self.om.sendExpression('translateModel(M)'))
-    self.clean()
-  def testSimulate(self):
-    self.assertEqual(True, self.om.sendExpression('loadString("%s")' % self.simpleModel))
-    self.om.sendExpression('res:=simulate(M, stopTime=2.0)')
-    self.assertNotEqual("", self.om.sendExpression('res.resultFile'))
-    self.clean()
 
-class FindBestOMCSession(unittest.TestCase):
-  def __init__(self, *args, **kwargs):
-    super(FindBestOMCSession, self).__init__(*args, **kwargs)
-    self.simpleModel = """model M
-  Real r = time;
-end M;"""
-    self.tmp = tempfile.mkdtemp(prefix='tmpOMPython.extratests')
-    self.origDir = os.getcwd()
-    os.chdir(self.tmp)
-    self.om = OMPython.FindBestOMCSession()
-    os.chdir(self.origDir)
-  def __del__(self):
-    shutil.rmtree(self.tmp, ignore_errors=True)
-    del(self.om)
-  def clean(self):
-    del(self.om)
-    self.om = None
+@pytest.fixture
+def omcs(tmp_path):
+    origDir = pathlib.Path.cwd()
+    os.chdir(tmp_path)
+    omcs = OMPython.OMCSessionLocal()
+    os.chdir(origDir)
+    return omcs
 
-  def testHelloWorldBestOMCSession(self):
-    self.assertEqual("HelloWorld!", self.om.sendExpression('"HelloWorld!"'))
-    self.clean()
 
-if __name__ == '__main__':
-    unittest.main()
+def testHelloWorld(omcs):
+    assert omcs.sendExpression('"HelloWorld!"') == "HelloWorld!"
+
+
+def test_Translate(omcs, model_time_str):
+    assert omcs.sendExpression(model_time_str) == ("M",)
+    assert omcs.sendExpression('translateModel(M)') is True
+
+
+def test_Simulate(omcs, model_time_str):
+    assert omcs.sendExpression(f'loadString("{model_time_str}")') is True
+    omcs.sendExpression('res:=simulate(M, stopTime=2.0)')
+    assert omcs.sendExpression('res.resultFile')
+
+
+def test_sendExpression(omcs):
+    assert omcs.sendExpression('"HelloWorld!"', parsed=False) == '"HelloWorld!"\n'
+    assert omcs.sendExpression('"HelloWorld!"', parsed=True) == 'HelloWorld!'
+
+
+def test_sendExpression_port(omcs):
+    port = omcs.get_port()
+    omcs2 = OMPython.OMCSessionPort(omc_port=port)
+
+    # run 1
+    assert omcs.sendExpression('"HelloWorld!"', parsed=False) == '"HelloWorld!"\n'
+
+    # run 2
+    assert omcs2.sendExpression('"HelloWorld!"', parsed=False) == '"HelloWorld!"\n'
+
+    del omcs2
+
+
+def test_Simulate_port(omcs, model_time_str):
+    port = omcs.get_port()
+    omcs2 = OMPython.OMCSessionPort(omc_port=port)
+
+    assert omcs2.sendExpression(f'loadString("{model_time_str}")') is True
+    omcs2.sendExpression('res:=simulate(M, stopTime=2.0)')
+    assert omcs2.sendExpression('res.resultFile') != ""
+
+    del omcs2
